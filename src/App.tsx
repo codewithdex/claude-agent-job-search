@@ -1,11 +1,6 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import type {
-  Message,
-  ToolLampState,
-  ImageAttachment,
-  ImageSsePayload,
-  ConversationSummary,
-} from './types';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
   deleteConversation,
   fetchConversationHistory,
@@ -13,796 +8,381 @@ import {
   sendMessageStream,
   stopAgent,
 } from './api';
-import type { RawSseEvent } from './api';
+import type { ConversationSummary } from './types';
 import { I18nProvider, LangToggle, useT, MessageKeys } from './i18n';
-import {
-  base64ToBlob,
-  saveImage,
-  loadConversationImages,
-  deleteConversationImages,
-  createObjectUrl,
-  revokeAllObjectUrls,
-  makeStorageKey,
-} from './lib/imageStore';
-import { saveSnapshot, loadSnapshot, deleteSnapshot } from './lib/chatUiStore';
-import ToolIndicators from './components/ToolIndicators';
-import ChatWindow from './components/ChatWindow';
-import ChatInput from './components/ChatInput';
-import CareerHubPanel from './components/CareerHubPanel';
-import DebugPanel from './components/DebugPanel';
 import ConversationSidebar from './components/ConversationSidebar';
-import GitHubLink from './components/GitHubLink';
-import DeployLink from './components/DeployLink';
+import {
+  INITIAL_FORM,
+  JOB_SEARCH_TASKS,
+  JobSearchFormValues,
+  JobSearchTask,
+  activeTaskMeta,
+  buildJobSearchPrompt,
+  toolProgressLabel,
+  validateJobSearchForm,
+} from './jobSearch';
 import styles from './App.module.css';
 
-const LAMP_IDS = ['commands', 'files', 'code_interpreter', 'browser'] as const;
-type LampId = typeof LAMP_IDS[number];
-const LAMP_ICONS: Record<string, string> = {
-  commands: '🗂️',
-  files: '📄',
-  code_interpreter: '📊',
-  browser: '🔍',
-};
+const CONVERSATION_KEY = 'jobsearch_conversation_id';
+const USER_KEY = 'jobsearch-user-id';
+const PAGE_SIZE = 20;
 
-/**
- * Map an EdgeOne platform tool name to a lamp group.
- *
- * The runtime exposes fine-grained tools (e.g. `browser_fetch`,
- * `browser_screenshot`, `files_read`, `commands_run`,
- * `code_interpreter_python`). The header only has 4 lamps, so we collapse
- * each family by prefix / keyword. Returns null for tools that don't belong
- * to any lamp group (e.g. `web_search`, `load_skill`).
- */
-function toolToLampId(toolName: string): LampId | null {
-  const name = toolName.toLowerCase();
-  if (name.startsWith('browser') || name.includes('browse')) return 'browser';
-  if (name.startsWith('code_interpreter') || name.startsWith('code-interpreter') || name.startsWith('interpreter')) return 'code_interpreter';
-  if (name.startsWith('files') || name.startsWith('file_') || name.startsWith('fs_')) return 'files';
-  if (name.startsWith('commands') || name.startsWith('command_') || name.startsWith('cmd_') || name.startsWith('shell') || name === 'exec') return 'commands';
-  if ((LAMP_IDS as readonly string[]).includes(name)) return name as LampId;
-  return null;
-}
-const LAMP_I18N_KEYS: Record<string, string> = { commands: 'tool.commands', files: 'tool.files', code_interpreter: 'tool.codeRunner', browser: 'tool.browser' };
+const STEPS = ['steps.1', 'steps.2', 'steps.3'] as const;
 
-const CONVERSATION_ID_STORAGE_KEY = 'jobsearch_conversation_id';
-const EO_USER_ID_STORAGE_KEY = 'jobsearch-user-id';
-const CONVERSATIONS_PAGE_SIZE = 20;
-
-/** Returns existing conversation ID from localStorage, or null if first visit */
-function getExistingConversationId(): string | null {
-  return localStorage.getItem(CONVERSATION_ID_STORAGE_KEY);
-}
-
-/** Returns existing or creates a new conversation ID */
-function getOrCreateConversationId(): string {
-  const cached = getExistingConversationId();
-  if (cached) return cached;
-
-  const conversationId = crypto.randomUUID();
-  localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, conversationId);
-  return conversationId;
-}
-
-/**
- * Stable user-level identifier persisted in localStorage.
- * All conversations created in this browser are scoped to this UUID,
- * which is sent to the backend as `userId` for filtering and indexing.
- */
-function getOrCreateEoUuid(): string {
-  const cached = localStorage.getItem(EO_USER_ID_STORAGE_KEY);
-  if (cached) return cached;
-
-  const eoUuid = crypto.randomUUID();
-  localStorage.setItem(EO_USER_ID_STORAGE_KEY, eoUuid);
-  return eoUuid;
-}
-
-function isWebSearchToolEvent(event: RawSseEvent): boolean {
-  if (event.eventType !== 'tool_called' || !event.data || typeof event.data !== 'object') {
-    return false;
-  }
-  const tool = (event.data as { tool?: unknown }).tool;
-  return tool === 'web_search' || tool === 'browser';
-}
-
-// Module-level dedup flag — outside React lifecycle, unaffected by StrictMode
-let _historyFetchInFlight = false;
-
-export default function App() {
-  return (
-    <I18nProvider>
-      <LangToggle />
-      <AppInner />
-    </I18nProvider>
-  );
+function id(key: string): string {
+  const saved = localStorage.getItem(key);
+  if (saved) return saved;
+  const value = crypto.randomUUID();
+  localStorage.setItem(key, value);
+  return value;
 }
 
 function AppInner() {
   const { t } = useT();
-
-  const buildLamps = useCallback((): ToolLampState[] => LAMP_IDS.map(id => ({
-    id,
-    label: t(LAMP_I18N_KEYS[id] as MessageKeys),
-    icon: LAMP_ICONS[id],
-    active: false,
-    animKey: 0,
-  })), [t]);
-
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [lamps, setLamps]       = useState<ToolLampState[]>(buildLamps);
-  const [loading, setLoading]   = useState(false);
-  const [historyLoading, setHistoryLoading] = useState(true);
-  // Name of the skill currently being loaded by the SDK. null when no skill
-  // is in flight. Set by the `skill_loaded` SSE event (singular — fires
-  // when the SDK ACTUALLY loads a skill for this turn), auto-cleared
-  // after a short interval so the pill animates out.
-  const [skillInUse, setSkillInUse] = useState<string | null>(null);
-  const [rightPanelMode, setRightPanelMode] = useState<'hub' | 'debug'>('hub');
-
-  // Conversation list state (left sidebar)
+  const [conversationId, setConversationId] = useState(() => id(CONVERSATION_KEY));
+  const userId = useRef(id(USER_KEY));
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [nextCursor, setNextCursor] = useState<string>();
   const [conversationsLoading, setConversationsLoading] = useState(true);
-  const [conversationsLoadingMore, setConversationsLoadingMore] = useState(false);
-  const [nextCursor, setNextCursor] = useState<string | undefined>(undefined);
-  const [activeConversationId, setActiveConversationId] = useState<string>(() =>
-    getOrCreateConversationId(),
-  );
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [form, setForm] = useState<JobSearchFormValues>(INITIAL_FORM);
+  const [result, setResult] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [progress, setProgress] = useState<string[]>([]);
+  const [error, setError] = useState('');
+  const controller = useRef<AbortController | null>(null);
 
-  // Stable user identifier — derived once, never changes for the lifetime of this browser
-  const eoUuidRef = useRef<string>(getOrCreateEoUuid());
+  const taskMeta = useMemo(() => activeTaskMeta(form.task), [form.task]);
 
-  // Update lamp labels when language changes
-  useEffect(() => {
-    setLamps(prev => prev.map(l => ({
-      ...l,
-      label: t(LAMP_I18N_KEYS[l.id] as MessageKeys),
-    })));
-  }, [t]);
+  const refreshConversations = useCallback(async (append = false, cursor?: string) => {
+    append ? setLoadingMore(true) : setConversationsLoading(true);
+    const response = await listConversations({
+      userId: userId.current,
+      limit: PAGE_SIZE,
+      order: 'desc',
+      after: cursor,
+    });
+    setConversations(previous =>
+      append
+        ? [...previous, ...response.conversations.filter(item => !previous.some(old => old.id === item.id))]
+        : response.conversations,
+    );
+    setNextCursor(response.nextCursor);
+    append ? setLoadingMore(false) : setConversationsLoading(false);
+  }, []);
 
-  const [debugEvents, setDebugEvents] = useState<RawSseEvent[]>([]);
-
-  const botMsgIdRef = useRef<string>('');
-  const abortCtrlRef = useRef<AbortController | null>(null);
-  const conversationIdRef = useRef<string>(activeConversationId);
-
-  // Keep ref in sync with state — sendMessageStream and other callbacks read from ref
-  useEffect(() => {
-    conversationIdRef.current = activeConversationId;
-  }, [activeConversationId]);
-
-  // Guard: don't overwrite snapshot during initial restore phase.
-  // Only start persisting once user has interacted (sent a message).
-  const initDoneRef = useRef(false);
-
-  // Persist UI snapshot whenever messages change (debounced)
-  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (messages.length === 0) return;
-    if (!initDoneRef.current) return; // Skip snapshot save during restore phase
-
-    if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
-    snapshotTimerRef.current = setTimeout(() => {
-      saveSnapshot(conversationIdRef.current, messages);
-    }, 500);
-
-    return () => {
-      if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
-    };
-  }, [messages]);
-
-  /**
-   * Load a conversation's messages, snapshot and image cache and put them on screen.
-   * Used both for the initial restore and for switching to another conversation.
-   */
-  const loadConversation = useCallback(async (convId: string) => {
+  const loadHistory = useCallback(async (target: string) => {
     setHistoryLoading(true);
-    setMessages([]);
-    setDebugEvents([]);
-    initDoneRef.current = false;
-
-    revokeAllObjectUrls();
-
-    try {
-      const [history, snapshot, storedImages] = await Promise.all([
-        fetchConversationHistory(convId, eoUuidRef.current),
-        loadSnapshot(convId),
-        loadConversationImages(convId),
-      ]);
-
-      const imageUrlMap = new Map<string, { url: string; mimeType: string; size: number; storageKey: string }>();
-      for (const record of storedImages) {
-        const url = createObjectUrl(record.storageKey, record.blob);
-        imageUrlMap.set(record.imageId, {
-          url,
-          mimeType: record.mimeType,
-          size: record.size,
-          storageKey: record.storageKey,
-        });
-      }
-
-      function rebuildImages(images: Message['images']): Message['images'] {
-        if (!images || images.length === 0) return images;
-        return images.map(img => {
-          if (typeof img === 'string') return img;
-          const urlInfo = imageUrlMap.get(img.id);
-          return urlInfo ? { ...img, url: urlInfo.url, persistent: true } : img;
-        });
-      }
-
-      let merged: Message[];
-      if (snapshot.length > 0) {
-        merged = snapshot.map(msg => ({
-          ...msg,
-          images: rebuildImages(msg.images),
-        }));
-      } else if (history.length > 0) {
-        merged = history;
-      } else {
-        merged = [];
-      }
-
-      setMessages(merged);
-    } finally {
-      setHistoryLoading(false);
-    }
+    setError('');
+    setResult('');
+    const messages = await fetchConversationHistory(target, userId.current);
+    const assistant = [...messages].reverse().find(message => message.role === 'assistant' && message.content.trim());
+    if (assistant) setResult(assistant.content);
+    setHistoryLoading(false);
   }, []);
 
-  /** Refresh the sidebar conversation list — usually after sending or switching. */
-  const refreshConversations = useCallback(async (mode: 'replace' | 'append' = 'replace', cursor?: string) => {
-    if (mode === 'append') {
-      setConversationsLoadingMore(true);
-    } else {
-      setConversationsLoading(true);
-    }
-    try {
-      const res = await listConversations({
-        userId: eoUuidRef.current,
-        limit: CONVERSATIONS_PAGE_SIZE,
-        order: 'desc',
-        after: cursor,
-      });
-
-      setNextCursor(res.nextCursor);
-
-      if (mode === 'append') {
-        setConversations(prev => {
-          const seen = new Set(prev.map(c => c.id));
-          const merged = [...prev];
-          for (const c of res.conversations) {
-            if (!seen.has(c.id)) merged.push(c);
-          }
-          return merged;
-        });
-      } else {
-        setConversations(res.conversations);
-      }
-    } finally {
-      if (mode === 'append') {
-        setConversationsLoadingMore(false);
-      } else {
-        setConversationsLoading(false);
-      }
-    }
-  }, []);
-
-  // Initial load: history (only if previously visited) + conversations list
   useEffect(() => {
-    void refreshConversations('replace');
+    void refreshConversations();
+    void loadHistory(conversationId);
+  }, [conversationId, loadHistory, refreshConversations]);
 
-    if (!getExistingConversationId() || _historyFetchInFlight) {
-      // First visit OR a sibling fetch is in flight — skip history fetch
-      if (!getExistingConversationId()) setHistoryLoading(false);
+  const change = <K extends keyof JobSearchFormValues>(key: K, value: JobSearchFormValues[K]) =>
+    setForm(current => ({ ...current, [key]: value }));
+
+  const startAnalysis = () => {
+    const validation = validateJobSearchForm(form);
+    if (validation) {
+      setError(validation);
       return;
     }
 
-    _historyFetchInFlight = true;
-    loadConversation(conversationIdRef.current).finally(() => {
-      _historyFetchInFlight = false;
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /** Update the current bot message's content via an updater function. */
-  const updateBotMessage = useCallback((updater: (content: string) => string) => {
-    setMessages(prev =>
-      prev.map(m =>
-        m.id === botMsgIdRef.current
-          ? { ...m, content: updater(m.content) }
-          : m
-      )
-    );
-  }, []);
-
-  const setBotActivity = useCallback((activity: Message['activity']) => {
-    setMessages(prev =>
-      prev.map(m =>
-        m.id === botMsgIdRef.current
-          ? { ...m, activity }
-          : m
-      )
-    );
-  }, []);
-
-  const finishBotActivity = useCallback(() => {
-    setMessages(prev => {
-      let changed = false;
-      const next = prev.map(m => {
-        if (m.id === botMsgIdRef.current && m.activity?.status === 'active') {
-          changed = true;
-          return { ...m, activity: { ...m.activity, status: 'done' as const } };
-        }
-        return m;
-      });
-      return changed ? next : prev;
-    });
-  }, []);
-
-  /** Clear the assistant message's `streaming` flag (hides the blinking caret). */
-  const clearBotStreaming = useCallback(() => {
-    setMessages(prev => {
-      let changed = false;
-      const next = prev.map(m => {
-        if (m.id === botMsgIdRef.current && m.streaming) {
-          changed = true;
-          const { streaming, ...rest } = m;
-          return rest;
-        }
-        return m;
-      });
-      return changed ? next : prev;
-    });
-  }, []);
-
-  /** Handle an incoming image SSE event: persist to IndexedDB and append ref to message. */
-  const handleImageEvent = useCallback(async (payload: ImageSsePayload) => {
-    const { imageId, base64, mimeType = 'image/png', size } = payload;
-    const convId = conversationIdRef.current;
-    const msgId = botMsgIdRef.current;
-    const storageKey = makeStorageKey(convId, imageId);
-
-    const blob = base64ToBlob(base64, mimeType);
-    const actualSize = size || blob.size;
-    let persistent = false;
-
-    try {
-      await saveImage({
-        conversationId: convId,
-        messageId: msgId,
-        imageId,
-        blob,
-        mimeType,
-      });
-      persistent = true;
-    } catch (e) {
-      console.warn('[image] IndexedDB save failed, using temporary URL:', e);
-    }
-
-    const url = persistent
-      ? createObjectUrl(storageKey, blob)
-      : URL.createObjectURL(blob);
-
-    const attachment: ImageAttachment = {
-      id: imageId,
-      storageKey,
-      url,
-      mimeType,
-      size: actualSize,
-      createdAt: Date.now(),
-      persistent,
-    };
-
-    setMessages(prev =>
-      prev.map(m =>
-        m.id === msgId
-          ? { ...m, images: [...(m.images || []), attachment] }
-          : m
-      )
-    );
-  }, []);
-
-  const finishStream = useCallback(() => {
-    setLoading(false);
-    abortCtrlRef.current = null;
-  }, []);
-
-  const handleSend = useCallback(async (text: string) => {
-    initDoneRef.current = true;
-    setRightPanelMode('debug');
-
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: text,
-      timestamp: Date.now(),
-    };
-
-    const botMsgId = crypto.randomUUID();
-    botMsgIdRef.current = botMsgId;
-    const botMsg: Message = {
-      id: botMsgId,
-      role: 'assistant',
-      content: '',
-      timestamp: Date.now(),
-      streaming: true,
-    };
-
-    setMessages(prev => [...prev, userMsg, botMsg]);
     setLoading(true);
+    setError('');
+    setResult('');
+    setProgress([t('progress.start')]);
+    let streamed = '';
+    let failed = false;
 
-    /**
-     * Optimistic sidebar update — fires as soon as the backend emits its first
-     * SSE event (matches ChatGPT's "new chat appears the moment streaming
-     * starts" UX). For brand-new conversations we prepend a synthesized summary;
-     * for existing ones we just bump them to the top.
-     *
-     * Server reconciliation still happens in onDone() via refreshConversations,
-     * which can correct the title if the runtime later overrides it.
-     */
-    let sidebarPrimed = false;
-    const cleanedText = text.replace(/\s+/g, ' ').trim();
-    const optimisticTitle =
-      cleanedText.length === 0 ? 'New chat'
-        : cleanedText.length <= 8 ? cleanedText
-          : `${cleanedText.slice(0, 8)}...`;
-
-    const primeSidebar = () => {
-      if (sidebarPrimed) return;
-      sidebarPrimed = true;
-
-      const convId = conversationIdRef.current;
-      const now = Date.now();
-
-      setConversations(prev => {
-        const idx = prev.findIndex(c => c.id === convId);
-        if (idx === -1) {
-          // Brand-new conversation — prepend.
-          const summary: ConversationSummary = {
-            id: convId,
-            title: optimisticTitle,
-            lastMessageAt: now,
-            userId: eoUuidRef.current,
-          };
-          return [summary, ...prev];
-        }
-        // Existing conversation — bump to top and refresh timestamp.
-        const next = [...prev];
-        const [moved] = next.splice(idx, 1);
-        next.unshift({ ...moved, lastMessageAt: now });
-        return next;
-      });
-    };
-
-    const ctrl = sendMessageStream(text, {
-      onTextDelta(delta) {
-        finishBotActivity();
-        updateBotMessage(content => content + delta);
-      },
-
-      onToolCalled(toolName) {
-        if (toolName === 'web_search' || toolName === 'browser') {
-          setBotActivity({ type: 'web_search', label: 'Web searching...', status: 'active' });
-        }
-
-        const lampId = toolToLampId(toolName);
-        if (!lampId) return;
-
-        setLamps(prev =>
-          prev.map(l =>
-            l.id === lampId
-              ? { ...l, active: true, animKey: l.animKey + 1 }
-              : l
-          )
-        );
-        setTimeout(() => {
-          setLamps(prev =>
-            prev.map(l => (l.id === lampId ? { ...l, active: false } : l))
-          );
-        }, 1000);
-      },
-
-      onImage(payload) {
-        finishBotActivity();
-        handleImageEvent(payload);
-      },
-
-      onRawEvent(event) {
-        // Every backend SSE frame flows through here, so this is the cheapest
-        // hook for "first byte from backend" — covers text_delta, tool_called,
-        // skills_available, debug_msg, image, etc.
-        primeSidebar();
-
-        if (!isWebSearchToolEvent(event)) {
-          finishBotActivity();
-        }
-
-        // Detect WSA_API_KEY-missing tool errors. The Claude SDK surfaces
-        // tool errors as a `debug_msg` whose `preview` is a serialized
-        // tool-result blob — but the shape differs by SDK language:
-        //   TypeScript SDK → JSON-style:  "type":"tool_result", "is_error":true
-        //   Python SDK     → repr-style:  ToolResultBlock(..., is_error=None)
-        // (Yes, the Python SDK leaves is_error=None even on actual tool
-        // failures; the failure is signalled only by the error message
-        // text itself.) So we cannot rely on is_error and instead match:
-        //   1. the literal env var name "WSA_API_KEY" (stable across
-        //      locales — it's an env-var, not a translatable string), AND
-        //   2. a tool-result context marker that survives both shapes.
-        // The context guard prevents a user prompt that literally contains
-        // "WSA_API_KEY" from flipping the chip to error.
-        // Not persisted: a refresh clears the chip; a successful retry
-        // calls setBotActivity({ status: 'active' }) and clears errorCode.
-        if (event.eventType === 'debug_msg') {
-          const preview = (event.data as { preview?: string } | null)?.preview;
-          if (
-            typeof preview === 'string' &&
-            preview.includes('WSA_API_KEY') &&
-            (
-              preview.includes('tool_result') ||
-              preview.includes('tool_use_result') ||
-              preview.includes('ToolResultBlock')
-            )
-          ) {
-            setBotActivity({
-              type: 'web_search',
-              label: 'Web search unavailable',
-              status: 'error',
-              errorCode: 'wsa_missing',
-            });
+    controller.current = sendMessageStream(
+      buildJobSearchPrompt(form),
+      {
+        onTextDelta: delta => {
+          streamed += delta;
+          setResult(streamed);
+        },
+        onToolCalled: toolName => {
+          const label = toolProgressLabel(toolName);
+          setProgress(items => (items.includes(label) ? items : [...items, label]));
+        },
+        onImage: () => undefined,
+        onDone: () => {
+          if (failed) {
+            setLoading(false);
+            return;
           }
-        }
-
-        // Coalesce consecutive text_delta events into a single growing entry,
-        // so a multi-paragraph response doesn't flood the debug panel with
-        // hundreds of one-token rows.
-        if (event.eventType === 'text_delta') {
-          const delta = (event.data as { delta?: string } | null)?.delta ?? '';
-          setRightPanelMode('debug');
-          setDebugEvents(prev => {
-            const last = prev[prev.length - 1];
-            if (last && last.eventType === 'text_delta') {
-              const prevDelta = (last.data as { delta?: string } | null)?.delta ?? '';
-              const merged: RawSseEvent = {
-                ...last,
-                data: { delta: prevDelta + delta },
-                raw: last.raw + delta,
-                timestamp: event.timestamp,
-              };
-              return [...prev.slice(0, -1), merged];
-            }
-            return [...prev, event];
-          });
-          return;
-        }
-        setRightPanelMode('debug');
-        setDebugEvents(prev => [...prev, event]);
-        // Only react to `skill_loaded` (singular). The plural
-        // `skills_available` / `skills_loaded` events fire on every
-        // request as catalog/config announcements regardless of whether
-        // the model actually uses a skill — they would flash the pill on
-        // every chat. The event payload's `name` is the skill's identifier;
-        // we surface it directly so the user sees WHICH skill is loading.
-        if (event.eventType === 'skill_loaded') {
-          const name =
-            (event.data as { name?: unknown } | null)?.name;
-          if (typeof name === 'string' && name.length > 0) {
-            setSkillInUse(name);
-            setTimeout(() => setSkillInUse(null), 2000);
-          }
-        }
+          setProgress(items => [...items, t('progress.done')]);
+          setLoading(false);
+          void refreshConversations();
+        },
+        onError: reason => {
+          failed = true;
+          setError(reason.message);
+          setLoading(false);
+        },
       },
+      conversationId,
+      { userMsgId: crypto.randomUUID(), botMsgId: crypto.randomUUID() },
+      userId.current,
+    );
+  };
 
-      onDone() {
-        finishBotActivity();
-        clearBotStreaming();
-        finishStream();
-        // Reconcile with backend so the title (and any other fields the runtime
-        // synthesized) reflect the server's authoritative state.
-        void refreshConversations('replace');
-      },
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    startAnalysis();
+  };
 
-      onError() {
-        finishBotActivity();
-        clearBotStreaming();
-        updateBotMessage(content => content || t("status.error"));
-        finishStream();
-      },
-    }, conversationIdRef.current, { userMsgId: userMsg.id, botMsgId }, eoUuidRef.current);
-
-    abortCtrlRef.current = ctrl;
-  }, [updateBotMessage, setBotActivity, finishBotActivity, clearBotStreaming, handleImageEvent, finishStream, refreshConversations, t]);
-
-  const handleClearHistory = useCallback(() => {
-    const oldConvId = conversationIdRef.current;
-
-    // The trash button in ChatInput is the same affordance as the trash
-    // icon on a sidebar item: it should DELETE the conversation entirely,
-    // not just clear its messages. Using `clearConversationHistory` here
-    // would leave the old conversation in the sidebar with an empty body
-    // and a fallback "New chat" title — confusing for users who clicked
-    // trash expecting "make this thread go away".
-    //
-    // Optimistically drop from the sidebar so the user sees the row
-    // disappear immediately; the network call is fire-and-forget.
-    setConversations(prev => prev.filter(c => c.id !== oldConvId));
-
-    deleteConversation(oldConvId, eoUuidRef.current).then(ok => {
-      if (!ok) {
-        console.warn('[delete-conversation] backend request failed');
-      }
-    }).finally(() => {
-      // Reconcile with backend in case state diverged.
-      void refreshConversations('replace');
-    });
-
-    // Cleanup IndexedDB images and UI snapshot for old conversation
-    revokeAllObjectUrls();
-    deleteConversationImages(oldConvId).catch(() => {});
-    deleteSnapshot(oldConvId).catch(() => {});
-
-    const newId = crypto.randomUUID();
-    localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, newId);
-    conversationIdRef.current = newId;
-    setActiveConversationId(newId);
-    setMessages([]);
-    setDebugEvents([]);
-    setRightPanelMode('hub');
-    initDoneRef.current = false;
-  }, [refreshConversations]);
-
-  const handleStop = useCallback(() => {
-    if (abortCtrlRef.current) {
-      abortCtrlRef.current.abort();
-      abortCtrlRef.current = null;
-    }
-
-    finishBotActivity();
-    // Clear the in-bubble blinking caret. onDone/onError normally do this,
-    // but fetch.abort() throws AbortError that sendMessageStream silently
-    // swallows — neither callback fires, so we have to do it here too.
-    clearBotStreaming();
-    updateBotMessage(content => content ? content + '\n\n' + t("status.stopped") : t("status.stopped"));
+  const stop = () => {
+    controller.current?.abort();
+    void stopAgent(conversationId);
     setLoading(false);
+    setProgress(items => [...items, t('progress.stopped')]);
+  };
 
-    stopAgent(conversationIdRef.current).then(ok => {
-      if (!ok) {
-        updateBotMessage(content => content + '\n\n' + t("status.backendError"));
-      }
-    });
-  }, [finishBotActivity, clearBotStreaming, updateBotMessage, t]);
-
-  /** User clicked a conversation in the sidebar. */
-  const handleSelectConversation = useCallback((id: string) => {
-    if (loading) return; // disabled while streaming
-    if (id === conversationIdRef.current) return;
-
-    localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, id);
-    conversationIdRef.current = id;
-    setActiveConversationId(id);
-    setRightPanelMode('hub');
-    void loadConversation(id);
-  }, [loading, loadConversation]);
-
-  /** User clicked "New chat" in the sidebar. */
-  const handleCreateConversation = useCallback(() => {
+  const createConversation = () => {
     if (loading) return;
+    const next = crypto.randomUUID();
+    localStorage.setItem(CONVERSATION_KEY, next);
+    setConversationId(next);
+    setResult('');
+    setError('');
+    setProgress([]);
+    setForm(INITIAL_FORM);
+  };
 
-    revokeAllObjectUrls();
+  const selectConversation = (target: string) => {
+    localStorage.setItem(CONVERSATION_KEY, target);
+    setConversationId(target);
+  };
 
-    const newId = crypto.randomUUID();
-    localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, newId);
-    conversationIdRef.current = newId;
-    setActiveConversationId(newId);
-    setMessages([]);
-    setDebugEvents([]);
-    setRightPanelMode('hub');
-    initDoneRef.current = false;
-    setHistoryLoading(false);
-  }, [loading]);
-
-  const handleLoadMoreConversations = useCallback(() => {
-    if (!nextCursor || conversationsLoadingMore) return;
-    void refreshConversations('append', nextCursor);
-  }, [nextCursor, conversationsLoadingMore, refreshConversations]);
-
-  /**
-   * User clicked the trash icon on a sidebar item.
-   *
-   * Optimistic delete: immediately remove the item from local UI state and
-   * fire-and-forget the backend request. We don't await or block the user —
-   * if the network call fails, we log it but don't roll back, since reloading
-   * the page will reconcile via /conversations anyway.
-   */
-  const handleDeleteConversation = useCallback((id: string) => {
-    if (loading) return;        // never delete mid-stream
-    if (!id) return;
-
-    const confirmed = window.confirm(t('sidebar.deleteConfirm'));
-    if (!confirmed) return;
-
-    const isActive = id === conversationIdRef.current;
-
-    // 1. Optimistically drop from sidebar.
-    setConversations(prev => prev.filter(c => c.id !== id));
-
-    // 2. If it was the active conversation, swap to a fresh empty one
-    //    so the chat panel doesn't keep rendering stale messages.
-    if (isActive) {
-      revokeAllObjectUrls();
-      const newId = crypto.randomUUID();
-      localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, newId);
-      conversationIdRef.current = newId;
-      setActiveConversationId(newId);
-      setMessages([]);
-      setDebugEvents([]);
-      setRightPanelMode('hub');
-      initDoneRef.current = false;
-      setHistoryLoading(false);
-    }
-
-    // 3. Best-effort cleanup of local caches — user doesn't wait on these.
-    void deleteSnapshot(id).catch(() => {});
-    void deleteConversationImages(id).catch(() => {});
-
-    // 4. Fire-and-forget backend delete. If it fails the user can refresh.
-    void deleteConversation(id, eoUuidRef.current).catch(e => {
-      console.warn('[delete-conversation] backend request failed:', e);
-    });
-  }, [loading, t]);
-
-  const sidebarHasMore = useMemo(() => Boolean(nextCursor), [nextCursor]);
+  const removeConversation = async (target: string) => {
+    if (!window.confirm(t('sidebar.deleteConfirm'))) return;
+    await deleteConversation(target, userId.current);
+    setConversations(items => items.filter(item => item.id !== target));
+    if (target === conversationId) createConversation();
+  };
 
   return (
-    <div className={styles.shell}>
-      <div className={styles.blob1} />
-      <div className={styles.blob2} />
-
+    <main className={styles.shell}>
+      <LangToggle />
       <div className={styles.stage}>
         <ConversationSidebar
           conversations={conversations}
-          activeConversationId={activeConversationId}
+          activeConversationId={conversationId}
           loading={conversationsLoading}
-          loadingMore={conversationsLoadingMore}
-          hasMore={sidebarHasMore}
+          loadingMore={loadingMore}
+          hasMore={Boolean(nextCursor)}
           disabled={loading}
-          onSelect={handleSelectConversation}
-          onCreate={handleCreateConversation}
-          onLoadMore={handleLoadMoreConversations}
-          onDelete={handleDeleteConversation}
+          onSelect={selectConversation}
+          onCreate={createConversation}
+          onLoadMore={() => void refreshConversations(true, nextCursor)}
+          onDelete={target => void removeConversation(target)}
         />
 
-        <div className={styles.chatPanel}>
-          <header className={styles.header}>
-            <div className={styles.headerLeft}>
-              <span className={styles.logo} aria-hidden>💼</span>
-              <div>
-                <p className={styles.title}>{t("app.title")}</p>
-                <p className={styles.subtitle}>{t("app.subtitle")}</p>
+        <section className={styles.main}>
+          <header className={styles.hero}>
+            <div className={styles.heroText}>
+              <div className={styles.brandRow}>
+                <span className={styles.logoMark} aria-hidden>JS</span>
+                <div>
+                  <p className={styles.eyebrow}>{t('app.eyebrow')}</p>
+                  <h1>{t('app.title')}</h1>
+                </div>
               </div>
+              <p className={styles.heroSub}>{t('app.subtitle')}</p>
             </div>
-            <ToolIndicators lamps={lamps} />
-            {skillInUse && <span className={styles.skillsLoading}>using {skillInUse}</span>}
+            <div className={styles.heroPills}>
+              <span className={styles.pill}>{t('pill.resume')}</span>
+              <span className={styles.pill}>{t('pill.match')}</span>
+              <span className={styles.pill}>{t('pill.interview')}</span>
+            </div>
           </header>
 
-          <div className={styles.chatWindowShell}>
-            <ChatWindow messages={messages} loading={loading} />
-            {historyLoading && messages.length === 0 && (
-              <div className={styles.historyOverlay}>
-                <div className={styles.historySpinner} />
+          <div className={styles.steps}>
+            {STEPS.map((key, index) => (
+              <div key={key} className={styles.step}>
+                <span className={styles.stepNum}>{index + 1}</span>
+                <span>{t(key as MessageKeys)}</span>
               </div>
-            )}
+            ))}
           </div>
-          <ChatInput onSend={handleSend} onStop={handleStop} onClear={handleClearHistory} disabled={loading} />
-        </div>
 
-        <div className={styles.sidePanel}>
-          {rightPanelMode === 'hub' ? (
-            <CareerHubPanel />
-          ) : (
-            <DebugPanel events={debugEvents} onClear={() => setDebugEvents([])} />
-          )}
-        </div>
+          <div className={styles.layout}>
+            <form className={styles.briefPanel} onSubmit={submit}>
+              <section className={styles.section}>
+                <h2>{t('form.roleSection')}</h2>
+                <div className={styles.fieldGrid}>
+                  <label className={styles.field}>
+                    <span>{t('form.targetRole')}</span>
+                    <input
+                      value={form.targetRole}
+                      onChange={e => change('targetRole', e.target.value)}
+                      placeholder={t('form.targetRolePlaceholder')}
+                      disabled={loading}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>{t('form.targetCompany')}</span>
+                    <input
+                      value={form.targetCompany}
+                      onChange={e => change('targetCompany', e.target.value)}
+                      placeholder={t('form.targetCompanyPlaceholder')}
+                      disabled={loading}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>{t('form.industry')}</span>
+                    <input
+                      value={form.industry}
+                      onChange={e => change('industry', e.target.value)}
+                      placeholder={t('form.industryPlaceholder')}
+                      disabled={loading}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <section className={styles.section}>
+                <h2>{t('form.taskSection')}</h2>
+                <div className={styles.taskGrid}>
+                  {JOB_SEARCH_TASKS.map(task => (
+                    <button
+                      key={task.id}
+                      type="button"
+                      className={form.task === task.id ? styles.taskCardActive : styles.taskCard}
+                      onClick={() => change('task', task.id as JobSearchTask)}
+                      disabled={loading}
+                    >
+                      <span className={styles.taskIcon} aria-hidden>{task.icon}</span>
+                      <strong>{t(task.labelKey as MessageKeys)}</strong>
+                      <small>{t(task.descKey as MessageKeys)}</small>
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className={styles.section}>
+                <h2>{t('form.materialsSection')}</h2>
+                <div className={styles.materialsGrid}>
+                  <label className={styles.field}>
+                    <span>{t('form.resume')}</span>
+                    <textarea
+                      value={form.resume}
+                      onChange={e => change('resume', e.target.value)}
+                      placeholder={t('form.resumePlaceholder')}
+                      rows={8}
+                      disabled={loading}
+                    />
+                  </label>
+                  <label className={styles.field}>
+                    <span>{t('form.jobDescription')}</span>
+                    <textarea
+                      value={form.jobDescription}
+                      onChange={e => change('jobDescription', e.target.value)}
+                      placeholder={t('form.jobDescriptionPlaceholder')}
+                      rows={8}
+                      disabled={loading}
+                    />
+                  </label>
+                </div>
+              </section>
+
+              <div className={styles.formActions}>
+                <button className={styles.primaryBtn} type="submit" disabled={loading}>
+                  {loading ? t('form.submitting') : t('form.submit')}
+                </button>
+                {loading && (
+                  <button className={styles.secondaryBtn} type="button" onClick={stop}>
+                    {t('form.stop')}
+                  </button>
+                )}
+              </div>
+            </form>
+
+            <aside className={styles.coachPanel} aria-live="polite">
+              <div className={styles.coachHeader}>
+                <div>
+                  <p className={styles.eyebrow}>{t('coach.label')}</p>
+                  <h2>{t(taskMeta.labelKey as MessageKeys)}</h2>
+                </div>
+                {(form.targetRole || form.targetCompany) && (
+                  <div className={styles.coachMeta}>
+                    {form.targetRole && <span>{form.targetRole}</span>}
+                    {form.targetCompany && <span>{form.targetCompany}</span>}
+                  </div>
+                )}
+              </div>
+
+              {progress.length > 0 && (
+                <ul className={styles.timeline}>
+                  {progress.map((item, index) => (
+                    <li key={`${item}-${index}`} className={styles.timelineItem}>
+                      <span className={styles.timelineDot}>
+                        {index === progress.length - 1 && loading ? <i className={styles.spinner} /> : '●'}
+                      </span>
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {error && (
+                <div className={styles.errorBox}>
+                  <strong>{t('result.errorTitle')}</strong>
+                  <p>{error}</p>
+                  <button type="button" className={styles.secondaryBtn} onClick={startAnalysis}>
+                    {t('result.retry')}
+                  </button>
+                </div>
+              )}
+
+              {historyLoading && (
+                <div className={styles.placeholder}>
+                  <i className={styles.spinner} />
+                  <p>{t('result.loading')}</p>
+                </div>
+              )}
+
+              {!historyLoading && !result && !loading && !error && (
+                <div className={styles.placeholder}>
+                  <div className={styles.placeholderIcon} aria-hidden>💼</div>
+                  <h3>{t('result.emptyTitle')}</h3>
+                  <p>{t('result.emptyHint')}</p>
+                  <div className={styles.featureRow}>
+                    <article><span>📄</span><p>{t('task.review.desc')}</p></article>
+                    <article><span>🎯</span><p>{t('task.match.desc')}</p></article>
+                    <article><span>🎤</span><p>{t('task.interview.desc')}</p></article>
+                  </div>
+                </div>
+              )}
+
+              {result && (
+                <article className={styles.resultBody}>
+                  <Markdown remarkPlugins={[remarkGfm]}>{result}</Markdown>
+                </article>
+              )}
+            </aside>
+          </div>
+        </section>
       </div>
-      <GitHubLink />
-      <DeployLink />
-    </div>
+    </main>
+  );
+}
+
+export default function App() {
+  return (
+    <I18nProvider>
+      <AppInner />
+    </I18nProvider>
   );
 }
