@@ -1,70 +1,95 @@
 const zh = {
   // Header
   "app.title": "JobSearch Agent",
-  "app.subtitle": "运行在 EdgeOne Makers 上的 AI 求职助手 — 简历优化、投递定制、面试准备与进度跟踪",
+  "app.subtitle": "你的 AI 求职教练 — 简历、投递、面试与进度跟踪",
 
   // Empty state
-  "empty.title": "JobSearch Agent",
-  "empty.hint": "我是你的 AI 求职助手，可以帮你审阅简历、针对职位描述定制申请材料、撰写求职信、准备面试、调研公司，并跟踪投递进度。",
+  "empty.title": "找到你的下一份工作",
+  "empty.hint": "粘贴简历或职位描述即可开始。我可以帮你定制申请材料、准备面试并保持条理清晰。",
   "empty.features": "简历优化 · 投递定制 · 面试准备 · 进度跟踪",
+  "empty.card.resume": "简历审阅",
+  "empty.card.resumeDesc": "针对结构、成果描述和关键词给出可执行建议。",
+  "empty.card.tailor": "定制投递",
+  "empty.card.tailorDesc": "让简历和求职信与目标岗位高度匹配。",
+  "empty.card.interview": "面试准备",
+  "empty.card.interviewDesc": "模拟问题、STAR 回答辅导与公司调研。",
+  "empty.card.track": "进度跟踪",
+  "empty.card.trackDesc": "管理投递状态、截止日期和跟进提醒。",
 
   // Chat input
-  "chat.placeholder": "粘贴职位描述、请求简历帮助，或描述你的目标岗位…  ⏎ 发送 · Shift+⏎ 换行",
-  "chat.hint": "由 Claude Agent SDK + EdgeOne Makers 驱动 · 仅供职业指导参考",
+  "chat.placeholder": "粘贴职位描述、简历，或描述你的目标岗位…",
+  "chat.hint": "仅供职业指导参考 · 不能替代专业职业咨询",
+  "chat.quickActions": "快捷操作",
 
   // Preset questions
   "preset.1": "帮我审阅软件工程师岗位的简历，并给出具体改进建议。",
+  "preset.1.short": "📄 审阅简历",
   "preset.2": "帮我针对科技创业公司的产品经理岗位定制简历和求职信。",
+  "preset.2.short": "✏️ 定制投递",
   "preset.4": "高级后端工程师岗位应该准备哪些行为面试和技术面试问题？",
   "preset.screenshotEdgeOne": "调研某公司的招聘页面，总结其工程文化要点和面试谈资。",
   "preset.skill.jobSearch": "分析我的简历与这份职位描述的匹配度，并列出最需要补强的差距。",
+  "preset.skill.jobSearch.short": "🎯 匹配分析",
 
   // Tool indicators
-  "tool.commands": "终端命令",
-  "tool.files": "文件操作",
-  "tool.codeRunner": "代码解释器",
-  "tool.browser": "浏览器",
+  "tool.commands": "工作区",
+  "tool.files": "文档",
+  "tool.codeRunner": "匹配评分",
+  "tool.browser": "调研",
 
-  // Web search activity (in-bubble chip)
+  // Career hub panel
+  "hub.title": "求职中心",
+  "hub.subtitle": "更智能求职所需的一切",
+  "hub.capabilities": "我能帮你做什么",
+  "hub.workflow": "推荐流程",
+  "hub.workspace": "工作区",
+  "hub.workspaceHint": "草稿和跟踪表会在会话期间保存，方便你随时继续。",
+  "hub.feature.resume.title": "简历审阅",
+  "hub.feature.resume.desc": "结构、成果描述和关键词优化。",
+  "hub.feature.tailor.title": "投递定制",
+  "hub.feature.tailor.desc": "针对每个 JD 调整简历和求职信。",
+  "hub.feature.interview.title": "面试准备",
+  "hub.feature.interview.desc": "行为面试、STAR 辅导与公司简报。",
+  "hub.feature.track.title": "投递跟踪",
+  "hub.feature.track.desc": "状态、截止日期和跟进提醒。",
+  "hub.step.1": "分享你的简历和目标岗位或行业。",
+  "hub.step.2": "粘贴职位描述或链接，分析匹配度。",
+  "hub.step.3": "获取定制修改、求职信草稿和差距分析。",
+  "hub.step.4": "准备面试并跟踪投递进度。",
+
+  // Web search
   "webSearch.error.wsaMissing": "搜索不可用，需配置 {0} API Key",
   "webSearch.error.wsaCta": "获取 Key",
 
-  // Skill indicators
   "skill.jobSearch": "求职助手",
 
-  // Debug panel
   "debug.title": "传输流",
   "debug.events": "事件",
   "debug.clear": "清除",
   "debug.empty": "等待 SSE 事件...",
   "debug.emptyHint": "发送消息后，所有原始后端数据将在此处显示。",
 
-  // Status & errors
   "status.error": "⚠️ 请求失败，请检查后端服务是否启动。",
   "status.stopped": "⏹ *已停止生成*",
   "status.backendError": "⚠️ 后端中断请求失败，服务端可能仍在运行。",
 
-  // Language toggle
   "lang.switch": "English",
 
-  // Sidebar
-  "sidebar.label": "会话列表",
-  "sidebar.title": "会话",
-  "sidebar.newChat": "新建聊天",
+  "sidebar.label": "求职会话",
+  "sidebar.title": "投递记录",
+  "sidebar.newChat": "新建会话",
   "sidebar.loading": "正在加载会话...",
   "sidebar.loadMore": "加载更多",
   "sidebar.loadingMore": "加载中...",
   "sidebar.emptyTitle": "暂无会话",
-  "sidebar.emptyHint": "点击「新建聊天」开始你的第一次求职对话。",
+  "sidebar.emptyHint": "新建会话，开始针对某个岗位或投递的工作。",
   "sidebar.delete": "删除会话",
   "sidebar.deleteConfirm": "确定要永久删除这个会话吗？此操作不可恢复。",
 
-  // Aria labels (button hover/screen-reader)
   "aria.send": "发送",
   "aria.clearHistory": "清除历史",
   "aria.stopGeneration": "停止生成",
 
-  // ─── Floating bottom-right action badges ─────────────────────────────
   "floatingLink.deploy": "一键部署",
   "floatingLink.github": "GitHub",
 } as const;

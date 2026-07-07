@@ -9,19 +9,16 @@
 .userRow { justify-content: flex-end; }
 
 .avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  border: 1px solid var(--bg-border);
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--accent-primary-dim), var(--accent-teal-dim));
+  border: 1px solid var(--accent-primary-dim);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: .8rem;
-  color: var(--accent-gold);
+  font-size: .85rem;
   flex-shrink: 0;
-  font-family: var(--font-display);
-  font-weight: 700;
 }
 .userAvatar {
   color: var(--text-secondary);

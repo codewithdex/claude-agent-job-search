@@ -9,7 +9,11 @@ interface Props {
   disabled: boolean;
 }
 
-const PRESET_KEYS = ['preset.1', 'preset.2', 'preset.skill.jobSearch'] as const;
+const PRESETS = [
+  { messageKey: 'preset.1', labelKey: 'preset.1.short' },
+  { messageKey: 'preset.2', labelKey: 'preset.2.short' },
+  { messageKey: 'preset.skill.jobSearch', labelKey: 'preset.skill.jobSearch.short' },
+] as const;
 
 export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) {
   const [value, setValue] = useState('');
@@ -40,22 +44,24 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
     el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
   };
 
-  const handlePreset = (text: string) => {
+  const handlePreset = (messageKey: string) => {
     if (disabled) return;
-    onSend(text);
+    onSend(t(messageKey as MessageKeys));
   };
 
   return (
     <div className={styles.bar}>
+      <p className={styles.presetsLabel}>{t('chat.quickActions')}</p>
       <div className={styles.presets}>
-        {PRESET_KEYS.map(key => (
+        {PRESETS.map(({ messageKey, labelKey }) => (
           <button
-            key={key}
+            key={messageKey}
             className={styles.presetChip}
-            onClick={() => handlePreset(t(key as MessageKeys))}
+            onClick={() => handlePreset(messageKey)}
             disabled={disabled}
+            title={t(messageKey as MessageKeys)}
           >
-            {t(key as MessageKeys)}
+            {t(labelKey as MessageKeys)}
           </button>
         ))}
       </div>
@@ -64,7 +70,7 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
         <textarea
           ref={textareaRef}
           className={styles.textarea}
-          placeholder={t("chat.placeholder")}
+          placeholder={t('chat.placeholder')}
           value={value}
           onChange={e => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -76,7 +82,7 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
           className={`${styles.sendBtn} ${(!value.trim() || disabled) ? styles.sendDisabled : ''}`}
           onClick={handleSend}
           disabled={!value.trim() || disabled}
-          aria-label={t("aria.send")}
+          aria-label={t('aria.send')}
         >
           <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
             <path d="M3 10L17 3l-4 7 4 7L3 10z" fill="currentColor"/>
@@ -86,8 +92,8 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
           className={styles.clearBtn}
           onClick={onClear}
           disabled={disabled}
-          aria-label={t("aria.clearHistory")}
-          title={t("aria.clearHistory")}
+          aria-label={t('aria.clearHistory')}
+          title={t('aria.clearHistory')}
         >
           <svg viewBox="0 0 24 24" fill="none" width="16" height="16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="3 6 5 6 21 6"/>
@@ -101,8 +107,8 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
           <button
             className={styles.stopBtn}
             onClick={onStop}
-            aria-label={t("aria.stopGeneration")}
-            title={t("aria.stopGeneration")}
+            aria-label={t('aria.stopGeneration')}
+            title={t('aria.stopGeneration')}
           >
             <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
               <rect x="4" y="4" width="12" height="12" rx="2" fill="currentColor"/>
@@ -110,7 +116,7 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
           </button>
         )}
       </div>
-      <p className={styles.hint}>{t("chat.hint")}</p>
+      <p className={styles.hint}>{t('chat.hint')}</p>
     </div>
   );
 }

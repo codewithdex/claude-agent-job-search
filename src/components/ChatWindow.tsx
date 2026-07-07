@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { Message } from '../types';
-import { useT } from '../i18n';
+import { useT, MessageKeys } from '../i18n';
 import ChatBubble from './ChatBubble';
 import styles from './ChatWindow.module.css';
 
@@ -9,20 +9,21 @@ interface Props {
   loading: boolean;
 }
 
+const EMPTY_CARDS = [
+  { icon: '📄', titleKey: 'empty.card.resume', descKey: 'empty.card.resumeDesc' },
+  { icon: '✏️', titleKey: 'empty.card.tailor', descKey: 'empty.card.tailorDesc' },
+  { icon: '🎯', titleKey: 'empty.card.interview', descKey: 'empty.card.interviewDesc' },
+  { icon: '📋', titleKey: 'empty.card.track', descKey: 'empty.card.trackDesc' },
+] as const;
+
 export default function ChatWindow({ messages, loading }: Props) {
   const windowRef = useRef<HTMLDivElement>(null);
   const { t } = useT();
 
   useEffect(() => {
-    // Nothing to scroll to when the window is empty.
     if (messages.length === 0 && !loading) return;
-    // Drive scroll on the container's own scrollTop instead of using
-    // scrollIntoView — the latter walks every ancestor, which scrolls the
-    // page header out of view.
     const el = windowRef.current;
     if (!el) return;
-    // While streaming, use 'instant' so successive smooth animations don't
-    // pile up and jitter; once streaming ends, fall back to 'smooth'.
     el.scrollTo({ top: el.scrollHeight, behavior: loading ? 'instant' : 'smooth' });
   }, [messages, loading]);
 
@@ -30,14 +31,21 @@ export default function ChatWindow({ messages, loading }: Props) {
     <div ref={windowRef} className={styles.window}>
       {messages.length === 0 && (
         <div className={styles.empty}>
-          <span className={styles.emptyIcon}>⬡</span>
-          <p className={styles.emptyTitle}>{t("empty.title")}</p>
-          <p className={styles.emptyHint}>
-            {t("empty.hint")}
-          </p>
-          <p className={styles.emptyFeatures}>
-            {t("empty.features")}
-          </p>
+          <div className={styles.emptyHero}>
+            <span className={styles.emptyIcon} aria-hidden>💼</span>
+            <p className={styles.emptyTitle}>{t('empty.title')}</p>
+            <p className={styles.emptyHint}>{t('empty.hint')}</p>
+          </div>
+          <div className={styles.emptyGrid}>
+            {EMPTY_CARDS.map(({ icon, titleKey, descKey }) => (
+              <div key={titleKey} className={styles.emptyCard}>
+                <span className={styles.emptyCardIcon} aria-hidden>{icon}</span>
+                <p className={styles.emptyCardTitle}>{t(titleKey as MessageKeys)}</p>
+                <p className={styles.emptyCardDesc}>{t(descKey as MessageKeys)}</p>
+              </div>
+            ))}
+          </div>
+          <p className={styles.emptyFeatures}>{t('empty.features')}</p>
         </div>
       )}
 
@@ -45,14 +53,9 @@ export default function ChatWindow({ messages, loading }: Props) {
         <ChatBubble key={msg.id} message={msg} />
       ))}
 
-      {/* The 3-dot typing row only fills the gap "waiting for the first
-       * token". Once the assistant bubble has any content (or its own
-       * activity sub-indicator takes over), the in-bubble streamingCaret
-       * carries the "still working" signal — this avoids two parallel bot
-       * bubbles in the same turn. */}
       {loading && !(messages.length > 0 && messages[messages.length - 1].role === 'assistant' && (messages[messages.length - 1].content.length > 0 || messages[messages.length - 1].activity)) && (
         <div className={styles.typingRow}>
-          <div className={styles.avatar}>⬡</div>
+          <div className={styles.avatar} aria-hidden>💼</div>
           <div className={styles.typing}>
             <span />
             <span />

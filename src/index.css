@@ -5,35 +5,44 @@
 }
 
 :root {
-  --bg-base: #0a0a0f;
-  --bg-surface: #111118;
-  --bg-elevated: #18181f;
-  --bg-border: #2a2a38;
+  --bg-base: #0b1120;
+  --bg-surface: #111827;
+  --bg-elevated: #1a2332;
+  --bg-border: #243044;
 
-  --text-primary: #f0f0f8;
-  --text-secondary: #8888aa;
-  --text-muted: #44445a;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
 
-  --accent-gold: #f5c842;
-  --accent-gold-dim: #f5c84230;
-  --accent-gold-glow: #f5c84260;
+  --accent-primary: #38bdf8;
+  --accent-primary-dim: #38bdf820;
+  --accent-primary-glow: #38bdf850;
+  --accent-teal: #2dd4bf;
+  --accent-teal-dim: #2dd4bf18;
+  --accent-success: #34d399;
 
-  --user-bubble: #1e1e2e;
-  --user-border: #3a3a5a;
-  --bot-bubble: #151520;
-  --bot-border: #252535;
+  /* Legacy aliases — keeps existing CSS working */
+  --accent-gold: var(--accent-primary);
+  --accent-gold-dim: var(--accent-primary-dim);
+  --accent-gold-glow: var(--accent-primary-glow);
 
-  --font-display: 'Syne', sans-serif;
+  --user-bubble: #1e293b;
+  --user-border: #334155;
+  --bot-bubble: #151f2e;
+  --bot-border: #243044;
+
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Plus Jakarta Sans', sans-serif;
   --font-mono: 'DM Mono', monospace;
 
-  --radius-sm: 6px;
+  --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
 
-  --shadow-card: 0 8px 40px rgba(0,0,0,0.5);
-  --transition-fast: 140ms cubic-bezier(.4,0,.2,1);
-  --transition-med: 280ms cubic-bezier(.4,0,.2,1);
+  --shadow-card: 0 12px 48px rgba(0, 0, 0, 0.45);
+  --transition-fast: 140ms cubic-bezier(.4, 0, .2, 1);
+  --transition-med: 280ms cubic-bezier(.4, 0, .2, 1);
 }
 
 html, body, #root {
@@ -41,18 +50,16 @@ html, body, #root {
   width: 100%;
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
 }
 
-/* scrollbar */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--bg-border); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--bg-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-/* Language toggle */
 .lang-toggle {
   position: fixed;
   top: 14px;
@@ -63,44 +70,41 @@ html, body, #root {
   gap: 2px;
   padding: 6px 14px;
   border-radius: 20px;
-  border: none;
-  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--bg-border);
+  background: rgba(17, 24, 39, 0.85);
   backdrop-filter: blur(12px);
   cursor: pointer;
-  transition: background 0.3s ease, box-shadow 0.3s ease;
+  transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
   line-height: 1;
 }
 .lang-toggle:hover {
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 20px rgba(245, 200, 66, 0.06);
+  background: rgba(26, 35, 50, 0.95);
+  border-color: var(--accent-primary-dim);
+  box-shadow: 0 0 20px var(--accent-primary-dim);
 }
 .lang-toggle:active {
   transform: scale(0.96);
 }
 .lang-toggle__label {
   display: inline-block;
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
   color: var(--text-muted);
   transition: font-size 0.35s cubic-bezier(.4, 0, .2, 1),
               color 0.35s cubic-bezier(.4, 0, .2, 1),
               font-weight 0.35s cubic-bezier(.4, 0, .2, 1),
-              transform 0.35s cubic-bezier(.4, 0, .2, 1),
-              text-shadow 0.35s ease;
+              transform 0.35s cubic-bezier(.4, 0, .2, 1);
   transform: scale(0.9);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.02em;
 }
 .lang-toggle__label--active {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--accent-gold);
+  color: var(--accent-primary);
   transform: scale(1);
-  text-shadow: 0 0 12px var(--accent-gold-glow);
 }
 .lang-toggle__sep {
-  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
   opacity: 0.4;

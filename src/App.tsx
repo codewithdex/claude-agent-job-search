@@ -28,7 +28,7 @@ import { saveSnapshot, loadSnapshot, deleteSnapshot } from './lib/chatUiStore';
 import ToolIndicators from './components/ToolIndicators';
 import ChatWindow from './components/ChatWindow';
 import ChatInput from './components/ChatInput';
-import CodeViewer from './components/CodeViewer';
+import CareerHubPanel from './components/CareerHubPanel';
 import DebugPanel from './components/DebugPanel';
 import ConversationSidebar from './components/ConversationSidebar';
 import GitHubLink from './components/GitHubLink';
@@ -37,7 +37,12 @@ import styles from './App.module.css';
 
 const LAMP_IDS = ['commands', 'files', 'code_interpreter', 'browser'] as const;
 type LampId = typeof LAMP_IDS[number];
-const LAMP_ICONS: Record<string, string> = { commands: '⌨️', files: '📁', code_interpreter: '🐍', browser: '🌐' };
+const LAMP_ICONS: Record<string, string> = {
+  commands: '🗂️',
+  files: '📄',
+  code_interpreter: '📊',
+  browser: '🔍',
+};
 
 /**
  * Map an EdgeOne platform tool name to a lamp group.
@@ -132,7 +137,7 @@ function AppInner() {
   // when the SDK ACTUALLY loads a skill for this turn), auto-cleared
   // after a short interval so the pill animates out.
   const [skillInUse, setSkillInUse] = useState<string | null>(null);
-  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'debug'>('code');
+  const [rightPanelMode, setRightPanelMode] = useState<'hub' | 'debug'>('hub');
 
   // Conversation list state (left sidebar)
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -639,7 +644,7 @@ function AppInner() {
     setActiveConversationId(newId);
     setMessages([]);
     setDebugEvents([]);
-    setRightPanelMode('code');
+    setRightPanelMode('hub');
     initDoneRef.current = false;
   }, [refreshConversations]);
 
@@ -672,7 +677,7 @@ function AppInner() {
     localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, id);
     conversationIdRef.current = id;
     setActiveConversationId(id);
-    setRightPanelMode('code');
+    setRightPanelMode('hub');
     void loadConversation(id);
   }, [loading, loadConversation]);
 
@@ -688,7 +693,7 @@ function AppInner() {
     setActiveConversationId(newId);
     setMessages([]);
     setDebugEvents([]);
-    setRightPanelMode('code');
+    setRightPanelMode('hub');
     initDoneRef.current = false;
     setHistoryLoading(false);
   }, [loading]);
@@ -728,7 +733,7 @@ function AppInner() {
       setActiveConversationId(newId);
       setMessages([]);
       setDebugEvents([]);
-      setRightPanelMode('code');
+      setRightPanelMode('hub');
       initDoneRef.current = false;
       setHistoryLoading(false);
     }
@@ -767,7 +772,7 @@ function AppInner() {
         <div className={styles.chatPanel}>
           <header className={styles.header}>
             <div className={styles.headerLeft}>
-              <span className={styles.logo}>⬡</span>
+              <span className={styles.logo} aria-hidden>💼</span>
               <div>
                 <p className={styles.title}>{t("app.title")}</p>
                 <p className={styles.subtitle}>{t("app.subtitle")}</p>
@@ -788,9 +793,9 @@ function AppInner() {
           <ChatInput onSend={handleSend} onStop={handleStop} onClear={handleClearHistory} disabled={loading} />
         </div>
 
-        <div className={styles.codePanel}>
-          {rightPanelMode === 'code' ? (
-            <CodeViewer />
+        <div className={styles.sidePanel}>
+          {rightPanelMode === 'hub' ? (
+            <CareerHubPanel />
           ) : (
             <DebugPanel events={debugEvents} onClear={() => setDebugEvents([])} />
           )}

@@ -99,7 +99,7 @@ export default function ChatBubble({ message }: Props) {
 
   return (
     <div className={`${styles.row} ${isUser ? styles.userRow : styles.botRow}`}>
-      {!isUser && <div className={styles.avatar}>⬡</div>}
+      {!isUser && <div className={styles.avatar} aria-hidden>💼</div>}
       <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.botBubble}`}>
         {!isUser && activity?.type === 'web_search' && (
           <div
