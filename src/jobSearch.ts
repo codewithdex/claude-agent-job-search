@@ -16,17 +16,17 @@ export interface JobSearchFormValues {
 
 export interface JobSearchTaskMeta {
   id: JobSearchTask;
-  icon: string;
+  mark: string;
   labelKey: string;
   descKey: string;
 }
 
 export const JOB_SEARCH_TASKS: JobSearchTaskMeta[] = [
-  { id: 'review_resume', icon: '📄', labelKey: 'task.review.label', descKey: 'task.review.desc' },
-  { id: 'tailor_application', icon: '✏️', labelKey: 'task.tailor.label', descKey: 'task.tailor.desc' },
-  { id: 'match_analysis', icon: '🎯', labelKey: 'task.match.label', descKey: 'task.match.desc' },
-  { id: 'cover_letter', icon: '💌', labelKey: 'task.cover.label', descKey: 'task.cover.desc' },
-  { id: 'interview_prep', icon: '🎤', labelKey: 'task.interview.label', descKey: 'task.interview.desc' },
+  { id: 'review_resume', mark: '01', labelKey: 'task.review.label', descKey: 'task.review.desc' },
+  { id: 'tailor_application', mark: '02', labelKey: 'task.tailor.label', descKey: 'task.tailor.desc' },
+  { id: 'match_analysis', mark: '03', labelKey: 'task.match.label', descKey: 'task.match.desc' },
+  { id: 'cover_letter', mark: '04', labelKey: 'task.cover.label', descKey: 'task.cover.desc' },
+  { id: 'interview_prep', mark: '05', labelKey: 'task.interview.label', descKey: 'task.interview.desc' },
 ];
 
 const TASK_INSTRUCTIONS: Record<JobSearchTask, string> = {

@@ -1,36 +1,29 @@
 const zh = {
-  "app.title": "JobSearch Agent",
-  "app.subtitle": "你的 AI 求职教练 — 审阅简历、定制投递、准备面试、跟踪进度。",
-  "app.eyebrow": "AI 求职教练",
+  "app.title": "Pathfinder",
+  "app.subtitle": "安静专注的求职工作室 — 粘贴材料，获得清晰可执行的下一步。",
+  "app.eyebrow": "求职工作室",
 
-  "pill.resume": "简历审阅",
-  "pill.match": "JD 匹配",
-  "pill.interview": "面试准备",
+  "coach.label": "教练画布",
+  "form.hint": "告诉 Pathfinder 你的目标，再选择辅导模式。",
 
-  "steps.1": "确定目标岗位",
-  "steps.2": "粘贴简历与职位描述",
-  "steps.3": "获取定制建议",
-
-  "coach.label": "教练回复",
-
-  "progress.start": "开始分析",
-  "progress.done": "分析完成",
+  "progress.start": "正在打开简报",
+  "progress.done": "辅导已就绪",
   "progress.stopped": "已停止",
 
-  "form.roleSection": "目标岗位",
-  "form.taskSection": "你需要什么帮助？",
+  "form.roleSection": "你的目标",
+  "form.taskSection": "辅导模式",
   "form.materialsSection": "你的材料",
   "form.targetRole": "岗位名称",
   "form.targetRolePlaceholder": "高级产品经理",
-  "form.targetCompany": "目标公司",
+  "form.targetCompany": "公司",
   "form.targetCompanyPlaceholder": "某某科技",
   "form.industry": "行业",
-  "form.industryPlaceholder": "互联网 / 科技",
+  "form.industryPlaceholder": "科技 / 互联网",
   "form.resume": "简历",
   "form.resumePlaceholder": "在此粘贴简历…",
   "form.jobDescription": "职位描述",
   "form.jobDescriptionPlaceholder": "粘贴 JD 或关键要求…",
-  "form.submit": "开始分析",
+  "form.submit": "开始辅导",
   "form.submitting": "处理中…",
   "form.stop": "停止",
 
@@ -45,15 +38,15 @@ const zh = {
   "task.interview.label": "面试准备",
   "task.interview.desc": "面试题、STAR 辅导与公司调研。",
 
-  "result.emptyTitle": "教练回复将显示在这里",
-  "result.emptyHint": "选择任务、填写简报，Agent 将审阅材料并给出可执行建议。",
+  "result.emptyTitle": "辅导结果将显示在这里",
+  "result.emptyHint": "在左侧填写简报，Pathfinder 会给出具体修改、差距与下一步。",
   "result.loading": "正在加载会话…",
   "result.errorTitle": "出现错误。",
   "result.retry": "重试",
 
   "sidebar.label": "求职会话",
-  "sidebar.title": "投递记录",
-  "sidebar.newChat": "新建会话",
+  "sidebar.title": "会话",
+  "sidebar.newChat": "新建",
   "sidebar.loading": "正在加载…",
   "sidebar.loadMore": "加载更多",
   "sidebar.loadingMore": "加载中…",
@@ -63,14 +56,6 @@ const zh = {
   "sidebar.deleteConfirm": "确定要永久删除这个会话吗？此操作不可恢复。",
 
   "lang.switch": "English",
-
-  "empty.title": "找到你的下一份工作",
-  "empty.hint": "",
-  "empty.features": "",
-  "hub.feature.resume.desc": "结构、成果描述与关键词优化。",
-  "hub.feature.tailor.desc": "针对 JD 调整简历和求职信。",
-  "hub.feature.interview.desc": "行为面试与 STAR 辅导。",
-  "hub.feature.track.desc": "跟踪投递与跟进提醒。",
 } as const;
 
 export default zh;

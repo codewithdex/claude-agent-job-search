@@ -1,24 +1,17 @@
 const en = {
-  "app.title": "JobSearch Agent",
-  "app.subtitle": "Your AI career coach — review resumes, tailor applications, prep interviews, and track progress.",
-  "app.eyebrow": "AI Career Coach",
+  "app.title": "Pathfinder",
+  "app.subtitle": "A calm studio for resumes, applications, and interview prep — paste your materials and get clear next moves.",
+  "app.eyebrow": "Job Search Studio",
 
-  "pill.resume": "Resume review",
-  "pill.match": "JD match",
-  "pill.interview": "Interview prep",
+  "coach.label": "Coach canvas",
+  "form.hint": "Tell Pathfinder who you're aiming for, then choose a coaching mode.",
 
-  "steps.1": "Define your target role",
-  "steps.2": "Paste resume & job description",
-  "steps.3": "Get tailored coaching",
-
-  "coach.label": "Coach output",
-
-  "progress.start": "Starting analysis",
-  "progress.done": "Analysis complete",
+  "progress.start": "Opening your brief",
+  "progress.done": "Coaching ready",
   "progress.stopped": "Stopped",
 
-  "form.roleSection": "Target role",
-  "form.taskSection": "What do you need?",
+  "form.roleSection": "Your target",
+  "form.taskSection": "Coaching mode",
   "form.materialsSection": "Your materials",
   "form.targetRole": "Role title",
   "form.targetRolePlaceholder": "Senior Product Manager",
@@ -30,7 +23,7 @@ const en = {
   "form.resumePlaceholder": "Paste your resume here…",
   "form.jobDescription": "Job description",
   "form.jobDescriptionPlaceholder": "Paste the job posting or key requirements…",
-  "form.submit": "Get coaching",
+  "form.submit": "Start coaching",
   "form.submitting": "Working…",
   "form.stop": "Stop",
 
@@ -45,15 +38,15 @@ const en = {
   "task.interview.label": "Interview prep",
   "task.interview.desc": "Questions, STAR coaching, company notes.",
 
-  "result.emptyTitle": "Your coaching session appears here",
-  "result.emptyHint": "Choose a task, fill in your brief, and the agent will review materials and return actionable advice.",
+  "result.emptyTitle": "Your coaching will land here",
+  "result.emptyHint": "Fill the brief on the left. Pathfinder will return concrete edits, gaps, and next steps.",
   "result.loading": "Loading saved session…",
   "result.errorTitle": "Something went wrong.",
   "result.retry": "Try again",
 
   "sidebar.label": "Application sessions",
-  "sidebar.title": "Applications",
-  "sidebar.newChat": "New session",
+  "sidebar.title": "Sessions",
+  "sidebar.newChat": "New",
   "sidebar.loading": "Loading sessions…",
   "sidebar.loadMore": "Load more",
   "sidebar.loadingMore": "Loading…",
@@ -63,15 +56,6 @@ const en = {
   "sidebar.deleteConfirm": "Permanently delete this session? This cannot be undone.",
 
   "lang.switch": "中文",
-
-  // Legacy keys kept for sidebar/components compatibility
-  "empty.title": "Land your next role",
-  "empty.hint": "",
-  "empty.features": "",
-  "hub.feature.resume.desc": "Structure, impact bullets, and keywords.",
-  "hub.feature.tailor.desc": "Align resume and cover letter to each JD.",
-  "hub.feature.interview.desc": "Behavioral questions and STAR coaching.",
-  "hub.feature.track.desc": "Track applications and follow-ups.",
 } as const;
 
 export default en;
