@@ -3,7 +3,8 @@ export type JobSearchTask =
   | 'tailor_application'
   | 'match_analysis'
   | 'interview_prep'
-  | 'cover_letter';
+  | 'cover_letter'
+  | 'tweak_report';
 
 export interface JobSearchFormValues {
   targetRole: string;
@@ -27,6 +28,7 @@ export const JOB_SEARCH_TASKS: JobSearchTaskMeta[] = [
   { id: 'match_analysis', mark: '03', labelKey: 'task.match.label', descKey: 'task.match.desc' },
   { id: 'cover_letter', mark: '04', labelKey: 'task.cover.label', descKey: 'task.cover.desc' },
   { id: 'interview_prep', mark: '05', labelKey: 'task.interview.label', descKey: 'task.interview.desc' },
+  { id: 'tweak_report', mark: '06', labelKey: 'task.report.label', descKey: 'task.report.desc' },
 ];
 
 const TASK_INSTRUCTIONS: Record<JobSearchTask, string> = {
@@ -40,6 +42,8 @@ const TASK_INSTRUCTIONS: Record<JobSearchTask, string> = {
     'Draft a cover letter tailored to this role and company. Preserve an authentic voice; avoid generic boilerplate.',
   interview_prep:
     'Prepare interview questions and coaching notes for this role. Include behavioral, situational, and role-specific questions with brief STAR guidance.',
+  tweak_report:
+    'Load the resume-report skill and produce the complete Resume Tweaks Report for the pasted resume (against the job description if provided). Return ONLY the report markdown — the app exports it to PDF — starting directly with the report title heading, with no preamble and no follow-up questions. Save a copy under workspace/reports/.',
 };
 
 export const INITIAL_FORM: JobSearchFormValues = {
@@ -69,6 +73,9 @@ export function validateJobSearchForm(values: JobSearchFormValues): string {
   }
   if (values.task === 'match_analysis' && !values.resume.trim()) {
     return 'Paste your resume for match analysis.';
+  }
+  if (values.task === 'tweak_report' && !values.resume.trim()) {
+    return 'Paste your resume for the tweak report.';
   }
   return '';
 }

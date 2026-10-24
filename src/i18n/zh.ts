@@ -37,12 +37,16 @@ const zh = {
   "task.cover.desc": "以你的风格起草求职信。",
   "task.interview.label": "面试准备",
   "task.interview.desc": "面试题、STAR 辅导与公司调研。",
+  "task.report.label": "优化报告",
+  "task.report.desc": "生成精美报告，可导出为 PDF。",
 
   "result.emptyTitle": "辅导结果将显示在这里",
   "result.emptyHint": "在左侧填写简报，Pathfinder 会给出具体修改、差距与下一步。",
   "result.loading": "正在加载会话…",
   "result.errorTitle": "出现错误。",
   "result.retry": "重试",
+  "result.downloadPdf": "下载 PDF",
+  "result.generatingPdf": "正在生成 PDF…",
 
   "sidebar.label": "求职会话",
   "sidebar.title": "会话",
