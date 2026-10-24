@@ -49,7 +49,9 @@ function AppInner() {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [progress, setProgress] = useState<string[]>([]);
   const [error, setError] = useState('');
+  const [pdfBusy, setPdfBusy] = useState(false);
   const controller = useRef<AbortController | null>(null);
+  const resultRef = useRef<HTMLElement | null>(null);
 
   const taskMeta = useMemo(() => activeTaskMeta(form.task), [form.task]);
 
@@ -145,6 +147,36 @@ function AppInner() {
     void stopAgent(conversationId);
     setLoading(false);
     setProgress(items => [...items, t('progress.stopped')]);
+  };
+
+  const downloadPdf = async () => {
+    const node = resultRef.current;
+    if (!node || pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      // Dynamic import keeps the ~400KB pdf bundle out of the initial load.
+      const html2pdf = (await import('html2pdf.js')).default;
+      const roleSlug = form.targetRole
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-')
+        .replace(/^-+|-+$/g, '');
+      const date = new Date().toISOString().slice(0, 10);
+      await html2pdf()
+        .set({
+          margin: [12, 14, 12, 14],
+          filename: `resume-tweak-report${roleSlug ? `-${roleSlug}` : ''}-${date}.pdf`,
+          image: { type: 'jpeg', quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        })
+        .from(node)
+        .save();
+    } catch (err) {
+      console.error('[pdf] generation failed:', err);
+    } finally {
+      setPdfBusy(false);
+    }
   };
 
   const createConversation = () => {
@@ -311,6 +343,16 @@ function AppInner() {
                     {form.targetCompany && <span>{form.targetCompany}</span>}
                   </div>
                 )}
+                {result && !loading && (
+                  <button
+                    type="button"
+                    className={styles.ghost}
+                    onClick={() => void downloadPdf()}
+                    disabled={pdfBusy}
+                  >
+                    {pdfBusy ? t('result.generatingPdf') : t('result.downloadPdf')}
+                  </button>
+                )}
               </div>
 
               {progress.length > 0 && (
@@ -357,7 +399,7 @@ function AppInner() {
               )}
 
               {result && (
-                <article className={styles.result}>
+                <article className={styles.result} ref={resultRef}>
                   <Markdown remarkPlugins={[remarkGfm]}>{result}</Markdown>
                 </article>
               )}

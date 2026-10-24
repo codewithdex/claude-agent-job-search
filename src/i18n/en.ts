@@ -37,12 +37,16 @@ const en = {
   "task.cover.desc": "Draft a letter in your voice.",
   "task.interview.label": "Interview prep",
   "task.interview.desc": "Questions, STAR coaching, company notes.",
+  "task.report.label": "Tweak report",
+  "task.report.desc": "Polished report, ready to export as PDF.",
 
   "result.emptyTitle": "Your coaching will land here",
   "result.emptyHint": "Fill the brief on the left. Pathfinder will return concrete edits, gaps, and next steps.",
   "result.loading": "Loading saved session…",
   "result.errorTitle": "Something went wrong.",
   "result.retry": "Try again",
+  "result.downloadPdf": "Download PDF",
+  "result.generatingPdf": "Preparing PDF…",
 
   "sidebar.label": "Application sessions",
   "sidebar.title": "Sessions",
