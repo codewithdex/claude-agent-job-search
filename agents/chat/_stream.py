@@ -515,12 +515,21 @@ def sdk_message_to_sse(msg: Any, state: StreamState, debug_logger: Any = None) -
 
     # --- ResultMessage: end of stream ---
     if _is_sdk_message(msg, ResultMessage, "ResultMessage"):
+        subtype = getattr(msg, "subtype", None)
         _log_tool_debug(debug_logger, "result_message", {
-            "subtype": getattr(msg, "subtype", None),
+            "subtype": subtype,
             "duration_ms": getattr(msg, "duration_ms", None),
             "total_cost_usd": getattr(msg, "total_cost_usd", None),
             "usage": getattr(msg, "usage", None),
         })
+        # Surface non-success endings to the frontend instead of stopping
+        # silently — otherwise a max-turns kill looks like an empty answer.
+        if subtype and subtype != "success":
+            friendly = {
+                "error_max_turns": "The agent used all its turns on tool calls before it could answer. Please try again.",
+                "error_during_execution": "The agent hit an error while running its tools. Please try again.",
+            }.get(subtype, f"The agent ended without completing (reason: {subtype}).")
+            return [sse_event("error", {"message": friendly, "errorType": subtype})], True
         return [], True
 
     # --- UserMessage: image extraction + debug ---

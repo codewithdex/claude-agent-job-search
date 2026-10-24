@@ -182,7 +182,9 @@ def build_agent_options(
         setting_sources=["project"],
         skills="all",
         permission_mode="dontAsk",
-        max_turns=5,
+        # Skill load + analysis + file writes + final answer need ~6-10 turns;
+        # 5 was killing runs before the model could reply (error_max_turns).
+        max_turns=12,
         env=collect_gateway_env(),
         include_partial_messages=True,
         max_buffer_size=20 * 1024 * 1024,  # 20MB — enough for browser screenshots
