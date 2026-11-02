@@ -11,6 +11,8 @@ import {
 import type { ConversationSummary } from './types';
 import { I18nProvider, LangToggle, useT, MessageKeys } from './i18n';
 import ConversationSidebar from './components/ConversationSidebar';
+import AuthPanel from './components/AuthPanel';
+import { AuthSession, AuthUser, loadAuth, logoutAccount, saveAuth } from './auth';
 import {
   INITIAL_FORM,
   JOB_SEARCH_TASKS,
@@ -35,10 +37,23 @@ function id(key: string): string {
   return value;
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function AppInner() {
   const { t } = useT();
   const [conversationId, setConversationId] = useState(() => id(CONVERSATION_KEY));
-  const userId = useRef(id(USER_KEY));
+  const [auth, setAuth] = useState<AuthSession | null>(() => loadAuth());
+  const [authOpen, setAuthOpen] = useState(false);
+  const anonId = useRef(id(USER_KEY));
+  // Sessions are scoped to the signed-in account when available,
+  // otherwise to the anonymous browser id (previous behavior).
+  const userId = useRef(auth?.user.userId ?? anonId.current);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string>();
   const [conversationsLoading, setConversationsLoading] = useState(true);
@@ -54,6 +69,13 @@ function AppInner() {
   const resultRef = useRef<HTMLElement | null>(null);
 
   const taskMeta = useMemo(() => activeTaskMeta(form.task), [form.task]);
+
+  // Keep the session user id in sync with the signed-in account.
+  // Declared before the history effect below so identity is resolved
+  // before conversation/history loads run.
+  useEffect(() => {
+    userId.current = auth?.user.userId ?? anonId.current;
+  }, [auth]);
 
   const refreshConversations = useCallback(async (append = false, cursor?: string) => {
     append ? setLoadingMore(true) : setConversationsLoading(true);
@@ -150,9 +172,31 @@ function AppInner() {
   };
 
   const downloadPdf = async () => {
-    const node = resultRef.current;
-    if (!node || pdfBusy) return;
+    const source = resultRef.current;
+    if (!source || pdfBusy) return;
     setPdfBusy(true);
+
+    // Clone the result into an off-screen, theme-styled node so the PDF
+    // carries the site's light-forest identity (header band, forest
+    // headings, paper background) instead of the plain white article.
+    const date = new Date().toISOString().slice(0, 10);
+    const pdfNode = document.createElement('div');
+    pdfNode.className = styles.pdfRoot;
+    pdfNode.innerHTML = `
+      <div class="${styles.pdfHead}">
+        <p class="${styles.pdfKicker}">${t('app.title')} · ${t('app.eyebrow')}</p>
+        <h1 class="${styles.pdfTitle}">${t(taskMeta.labelKey as MessageKeys)}</h1>
+        <div class="${styles.pdfMeta}">
+          ${form.targetRole.trim() ? `<span>${escapeHtml(form.targetRole.trim())}</span>` : ''}
+          ${form.targetCompany.trim() ? `<span>${escapeHtml(form.targetCompany.trim())}</span>` : ''}
+          <span>${date}</span>
+        </div>
+      </div>
+      <div class="${styles.pdfBody}">${source.innerHTML}</div>
+      <div class="${styles.pdfFoot}">${t('pdf.footer')}</div>
+    `;
+    document.body.appendChild(pdfNode);
+
     try {
       // Dynamic import keeps the ~400KB pdf bundle out of the initial load.
       const html2pdf = (await import('html2pdf.js')).default;
@@ -161,20 +205,20 @@ function AppInner() {
         .toLowerCase()
         .replace(/[^a-z0-9\u4e00-\u9fff]+/gi, '-')
         .replace(/^-+|-+$/g, '');
-      const date = new Date().toISOString().slice(0, 10);
       await html2pdf()
         .set({
-          margin: [12, 14, 12, 14],
+          margin: 0,
           filename: `resume-tweak-report${roleSlug ? `-${roleSlug}` : ''}-${date}.pdf`,
           image: { type: 'jpeg', quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+          html2canvas: { scale: 2, useCORS: true, backgroundColor: '#f4f7f4' },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         })
-        .from(node)
+        .from(pdfNode)
         .save();
     } catch (err) {
       console.error('[pdf] generation failed:', err);
     } finally {
+      pdfNode.remove();
       setPdfBusy(false);
     }
   };
@@ -200,6 +244,33 @@ function AppInner() {
     await deleteConversation(target, userId.current);
     setConversations(items => items.filter(item => item.id !== target));
     if (target === conversationId) createConversation();
+  };
+
+  // ─── Membership ───
+  // Switching identity starts a fresh conversation so the sidebar and
+  // history reload scoped to the new user (account or anonymous).
+  const handleAuth = (session: AuthSession) => {
+    saveAuth(session);
+    setAuth(session);
+    setAuthOpen(false);
+    createConversation();
+  };
+
+  const handleLogout = () => {
+    if (auth) void logoutAccount(auth.token);
+    saveAuth(null);
+    setAuth(null);
+    setAuthOpen(false);
+    createConversation();
+  };
+
+  const handleProfileUpdate = (user: AuthUser) => {
+    setAuth(current => {
+      if (!current) return current;
+      const next = { ...current, user };
+      saveAuth(next);
+      return next;
+    });
   };
 
   return (
@@ -233,6 +304,20 @@ function AppInner() {
               <div>
                 <p className={styles.kicker}>{t('app.eyebrow')}</p>
                 <h1 className={styles.brand}>{t('app.title')}</h1>
+              </div>
+              <div className={styles.accountArea}>
+                {auth ? (
+                  <button type="button" className={styles.accountChip} onClick={() => setAuthOpen(true)}>
+                    <span className={styles.accountAvatar} aria-hidden>
+                      {(auth.user.name || auth.user.email).charAt(0).toUpperCase()}
+                    </span>
+                    <span>{auth.user.name}</span>
+                  </button>
+                ) : (
+                  <button type="button" className={styles.signInBtn} onClick={() => setAuthOpen(true)}>
+                    {t('auth.signIn')}
+                  </button>
+                )}
               </div>
             </div>
             <p className={styles.lede}>{t('app.subtitle')}</p>
@@ -407,6 +492,16 @@ function AppInner() {
           </div>
         </section>
       </div>
+
+      {authOpen && (
+        <AuthPanel
+          auth={auth}
+          onAuth={handleAuth}
+          onProfileUpdate={handleProfileUpdate}
+          onLogout={handleLogout}
+          onClose={() => setAuthOpen(false)}
+        />
+      )}
     </main>
   );
 }
